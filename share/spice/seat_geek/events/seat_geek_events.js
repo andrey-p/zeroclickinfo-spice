@@ -9,7 +9,7 @@
             .trim().toLowerCase();
     }
 
-    function handle_api_result(api_result) {
+    function handle_api_result(api_result, query_type) {
         if(!api_result || api_result.error || api_result.events.length === 0) {
             return Spice.failed('seat_geek');
         }
@@ -24,12 +24,26 @@
             data: api_result.events,
             meta: {
                 sourceName: "SeatGeek",
-                sourceUrl: "https://seatgeek.com/search?search=" + clean_query,
+                sourceUrl: "https://seatgeek.com/search?search=concerts " + clean_query,
                 sourceIconUrl: "https://seatgeek.com/favicon.ico",
                 itemType: "Upcoming Concerts"
             },
             normalize: function(item) {
-                var artist = capitalizedAcronym(clean_query);
+                var num_performers = item.performers.length;
+
+                function get_performers_description() {
+                    var performers_description = "";
+
+                    if (num_performers > 1) {
+                        if (query_type === "artist") {
+                            performers_description = capitalizedAcronym(clean_query) + " and " + (num_performers - 1) + " others";
+                        } else {
+                            performers_description = num_performers + " acts playing";
+                        }
+                    }
+
+                    return performers_description;
+                }
 
                 // Capitalize the name of the band/artist searched for;
                 // if the name is composed by multiple words, capitalize
@@ -87,25 +101,6 @@
                     return;
                 }
 
-                // Get number of performers, excluding
-                // the one searched for
-
-                function getNumPerformers(performers) {
-                    var how_many = 0;
-                    var slug = clean_query.replace(/\s/g, "-");
-                    for(var i = 0; i < performers.length; i++) {
-                        if(performers[i].slug !== slug) {
-                            how_many++;
-                        }
-                    }
-
-                    if(how_many > 1) {
-                        return how_many;
-                    }
-
-                    return;
-                }
-
                 function getPrice(lowest, highest) {
                     var price = "";
 
@@ -119,8 +114,8 @@
                 return {
                     url: item.url,
                     price: getPrice(item.stats.lowest_price, item.stats.highest_price),
-                    artist: artist,
-                    num_performers: getNumPerformers(item.performers),
+                    performers: performers_description,
+                    num_performers: num_performers,
                     title: item.short_title,
                     place: item.venue.name,
                     img: item.performers[0].images.small,
@@ -142,7 +137,7 @@
         });
     }
 
-    env.ddg_spice_seat_geek_events = function(api_result) {
+    env.ddg_spice_seat_geek_events = function() {
         var clean_query = get_clean_query(),
             slug = clean_query.replace(/\s/g, "-");
 
@@ -151,9 +146,7 @@
             return Spice.failed('seat_geek');
         }
 
-        // Prevent jQuery from appending "_={timestamp}" in our url when we use $.getScript.
-        // If cache was set to false, it would be calling /js/spice/dictionary/definition/hello?_=12345
-        // and that's something that we don't want.
+        // prevent jQuery from tacking on a timestamp to our requests
         $.ajaxSetup({ cache: true });
 
         // check the remainder of the query...
@@ -169,8 +162,13 @@
         }
     };
 
-    // all event searches are handled the same way
-    env.ddg_spice_seat_geek_events_by_artist = handle_api_result;
-    env.ddg_spice_seat_geek_events_by_city = handle_api_result;
-    env.ddg_spice_seat_geek_events_by_venue = handle_api_result;
+    env.ddg_spice_seat_geek_events_by_artist = function (api_result) {
+        handle_api_result(api_result, "artist");
+    };
+    env.ddg_spice_seat_geek_events_by_city = function (api_result) {
+        handle_api_result(api_result, "city");
+    };
+    env.ddg_spice_seat_geek_events_by_venue = function (api_result) {
+        handle_api_result(api_result, "venue");
+    };
 }(this));
