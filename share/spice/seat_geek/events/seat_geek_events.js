@@ -1,17 +1,22 @@
 (function(env) {
     "use strict";
-    env.ddg_spice_seat_geek_events = function(api_result) {
 
+    var basePath = "/js/spice/seat_geek";
+
+    function get_clean_query() {
+        return DDG.get_query()
+            .replace(/((upcoming\s)?(concerts?))|(live(\s(shows?))?)/, '')
+            .trim().toLowerCase();
+    }
+
+    function handle_api_result(api_result) {
         if(!api_result || api_result.error || api_result.events.length === 0) {
             return Spice.failed('seat_geek');
         }
 
-        var query = DDG.get_query();
-        var clean_query = query.replace(/((upcoming\s)?(concerts?))|(live(\s(shows?))?)/, '').trim().toLowerCase();
-
-        var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'June', 'July', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
-
-        var days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'June', 'July', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'],
+            days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+            clean_query = get_clean_query();
 
         Spice.add({
             id: "seat_geek",
@@ -135,5 +140,37 @@
                 }
             }
         });
+    }
+
+    env.ddg_spice_seat_geek_events = function(api_result) {
+        var clean_query = get_clean_query(),
+            slug = clean_query.replace(/\s/g, "-");
+
+        // prevent the spice from running with empty queries e.g. "live shows"
+        if(clean_query.length === 0) {
+            return Spice.failed('seat_geek');
+        }
+
+        // Prevent jQuery from appending "_={timestamp}" in our url when we use $.getScript.
+        // If cache was set to false, it would be calling /js/spice/dictionary/definition/hello?_=12345
+        // and that's something that we don't want.
+        $.ajaxSetup({ cache: true });
+
+        // check the remainder of the query...
+        if(clean_query.indexOf("in ") === 0 && clean_query.length > 3) {
+            // if it's something like "in {placename}", look at cities
+            $.getScript(basePath + "/events_by_city/" + slug.replace("in-", ""));
+        } else if(clean_query.indexOf("at ") === 0 && clean_query.length > 3) {
+            // if it's something like "at {placename}", look at venues
+            $.getScript(basePath + "/events_by_venue/" + slug.replace("at-", ""));
+        } else {
+            // else assume we mean an artist name
+            $.getScript(basePath + "/events_by_artist/" + slug);
+        }
     };
+
+    // all event searches are handled the same way
+    env.ddg_spice_seat_geek_events_by_artist = handle_api_result;
+    env.ddg_spice_seat_geek_events_by_city = handle_api_result;
+    env.ddg_spice_seat_geek_events_by_venue = handle_api_result;
 }(this));
